@@ -1,0 +1,70 @@
+#### Tagseq data processing pipeline put together by Cheviron lab members
+### Used here to map Junco reads from Stager & Cheviron 2020, Biology Letters to the Zonotrichia albicollis genome for downstream analysis
+## Last edited: 2/1/2019
+
+#### Make a project folder /TagSeq with /reads /trim and /sam as subfolders
+#### Copy reads to /reads folder and unzip
+gunzip -d -k ./*.gz #unzip data
+cp ./*.fastq ./TagSeq/reads #move to unzipped folder
+
+{#### Download Zonotrichia albicollis reference genome (.fna) and genome annotation files (.gff) from NCBI
+#### Make a genome reference folder 
+mkdir ./Zonotrichia_ref
+
+#and upload .fna and .gff
+scp -r ./GCF_000385455.1_Zonotrichia_albicollis-1.0.1_genomic.fna.gz ./Zonotrichia_ref
+
+scp -r ./GCF_000385455.1_Zonotrichia_albicollis-1.0.1_genomic.gff.gz ./Zonotrichia_ref
+
+gunzip -d -k ./*.gz #unzip data
+
+#### Convert gff to saf for featureCounts
+# GFF is tab-delimited with nine-columns: seqid, source, type, start, end, score, strand, phase, attributes
+# SAF is tab-delimited with five-columns: GeneID, Chr, Start, End, Strand
+###### run this code block in Python to convert your .gff to .saf for use by featureCounts
+# import modules
+import sys
+import re
+
+# Open input and output files
+FH1 = open('./Zonotrichia_ref/GCF_000385455.1_Zonotrichia_albicollis-1.0.1_genomic.gff','r')
+FHOUT = open('./Zonotrichia_ref/GCF_000385455.1_Zonotrichia_albicollis-1.0.1_genomic.saf','w')
+
+#Column headers for SAF format
+FHOUT.write("GeneID\tChr\tStart\tEnd\tStrand\n")
+
+for line in FH1:
+	#gene_id = () # make a list of gene names
+	if bool(re.search('gene=',line))==True:
+		linelist=line.strip().split('\t') # split each line by tabs
+		Infor = linelist[8].split(';') #whatever column number contains the gene info, split it by ';'
+		for infor_field in Infor: #goes through each entry in column that was split by ';'
+			infor_field_symbol = (infor_field.split('='))[0]
+			infor_field_value = (infor_field.split('='))[1]
+			if infor_field_symbol=="gene":
+				gene_id = infor_field_value
+				# Convert to SAF
+				OutputLine = gene_id + re.sub(r'^(.+)\t.+\t.+\t(.+)\t(.+)\t.+\t(.+)\t.+\t.*$',r'\t\1\t\2\t\3\t\4',line)
+				# print output
+				print(OutputLine)
+				FHOUT.write(OutputLine)
+
+# Always close your files
+FH1.close()
+FHOUT.close()
+###### 
+
+
+
+
+#### Install rnaseq_clipper scripts from github into your scratch folder
+# https://github.com/z0on/tag-based_RNAseq
+git clone https://github.com/z0on/tag-based_RNAseq.git
+
+#### Create bwa genome index files in your reference folder using your reference genome
+bwa index ./Zonotrichia_ref/GCF_000385455.1_Zonotrichia_albicollis-1.0.1_genomic.fna
+
+#### Run bash script to trim, filter, map, and count (see below for script)
+./TagSeq.sh
+
+#### Use your output.txt counts table for downstream analysis in R
